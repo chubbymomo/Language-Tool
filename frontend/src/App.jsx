@@ -36,7 +36,7 @@ const DEFAULT_SETTINGS = {
   furiganaMode: 'hover',
   englishMode: 'visible',
   autoAddVocab: false,
-  useCustomBackend: false,
+  useCustomBackend: true,
   backendUrl: 'http://localhost:5000/api/chat'
 };
 
