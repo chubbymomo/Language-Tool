@@ -30,6 +30,50 @@ An interactive Japanese language tutor powered by Google's Gemini AI. Features r
 
 ## Quick Start
 
+### Option 1: Docker (Recommended)
+
+The easiest way to run everything:
+
+```bash
+# 1. Clone the repo
+git clone <your-repo-url>
+cd japanese-tutor
+
+# 2. Create environment file
+cp .env.example .env
+
+# 3. Add your Gemini API key to .env
+nano .env
+
+# 4. Start all services
+docker compose up -d
+
+# 5. Open http://localhost in your browser
+```
+
+**Docker Commands:**
+
+```bash
+# Start services
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Stop services
+docker compose down
+
+# Rebuild after code changes
+docker compose up -d --build
+
+# Reset database (delete volume)
+docker compose down -v
+```
+
+---
+
+### Option 2: Manual Setup
+
 ### 1. Clone and Navigate
 
 ```bash
@@ -224,6 +268,29 @@ cd frontend
 npm run build
 # Serve dist/ folder with nginx or similar
 ```
+
+## Docker Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Docker Network                        │
+│                                                          │
+│  ┌──────────────┐    ┌──────────────┐    ┌───────────┐  │
+│  │   Frontend   │───▶│   Backend    │───▶│  Postgres │  │
+│  │   (nginx)    │    │   (Flask)    │    │    (db)   │  │
+│  │   port 80    │    │  port 5000   │    │ port 5432 │  │
+│  └──────────────┘    └──────────────┘    └───────────┘  │
+│         │                   │                   │        │
+└─────────┼───────────────────┼───────────────────┼────────┘
+          │                   │                   │
+      localhost:80      localhost:5000      localhost:5432
+```
+
+| Container | Image | Purpose |
+|-----------|-------|---------|
+| jtutor-frontend | nginx:alpine | Serves React build, proxies /api |
+| jtutor-backend | python:3.11-slim | Flask API server |
+| jtutor-db | postgres:16-alpine | Persistent data storage |
 
 ## License
 
