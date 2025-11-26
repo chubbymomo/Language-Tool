@@ -1,6 +1,5 @@
-// frontend/src/components/ChatArea.jsx
 import React, { useRef, useEffect } from 'react';
-import { AlertCircle, Volume2, GraduationCap } from 'lucide-react';
+import { AlertCircle, Volume2, VolumeX, GraduationCap } from 'lucide-react';
 import useTTS from '../hooks/useTTS';
 import { safeString, reconstructSentence } from '../constants';
 
@@ -53,79 +52,95 @@ const InteractiveSentence = ({ segments, onWordClick, furiganaMode }) => {
 
 const ChatArea = ({ activeSession, settings, isProcessing, onWordClick }) => {
   const scrollRef = useRef(null);
-  const { speak } = useTTS();
+  const { speak, stop, isSpeaking, speakingId } = useTTS();
   
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [activeSession.messages]);
 
+  const handleSpeak = (text, messageId) => {
+    if (isSpeaking && speakingId === messageId) {
+      stop();
+    } else {
+      speak(text, settings.ttsVoice, messageId);
+    }
+  };
+
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-6">
-      {activeSession.messages.map((msg, idx) => (
-        <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-          <div className={`max-w-[85%] md:max-w-[70%] rounded-2xl p-4 shadow-sm ${
-            msg.role === 'user' 
-              ? 'bg-indigo-600 text-white' 
-              : msg.isError 
-                ? 'bg-red-50 border border-red-200' 
-                : 'bg-white border border-gray-100'
-          }`}>
-            {msg.role === 'user' ? (
-              <div className="text-lg">{safeString(msg.content)}</div>
-            ) : (
-              <div className="space-y-2">
-                <div className="flex justify-between items-start gap-2">
-                  {msg.isError ? (
-                    <div className="flex items-center gap-2 text-red-600">
-                      <AlertCircle size={20} />
-                      <span className="font-medium">Error: {safeString(msg.content.text)}</span>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="text-gray-800 flex-1">
-                        {msg.content && msg.content.segments 
-                          ? <InteractiveSentence 
-                              segments={msg.content.segments} 
-                              furiganaMode={settings.furiganaMode} 
-                              onWordClick={(seg) => onWordClick(seg, msg.content.segments)} 
-                            />
-                          : <div className="text-xl">{safeString(msg.content?.japanese || "...")}</div>
-                        }
+      {activeSession.messages.map((msg, idx) => {
+        const messageId = `msg-${idx}`;
+        const isThisPlaying = isSpeaking && speakingId === messageId;
+        
+        return (
+          <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[85%] md:max-w-[70%] rounded-2xl p-4 shadow-sm ${
+              msg.role === 'user' 
+                ? 'bg-indigo-600 text-white' 
+                : msg.isError 
+                  ? 'bg-red-50 border border-red-200' 
+                  : 'bg-white border border-gray-100'
+            }`}>
+              {msg.role === 'user' ? (
+                <div className="text-lg">{safeString(msg.content)}</div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex justify-between items-start gap-2">
+                    {msg.isError ? (
+                      <div className="flex items-center gap-2 text-red-600">
+                        <AlertCircle size={20} />
+                        <span className="font-medium">Error: {safeString(msg.content.text)}</span>
                       </div>
-                      <button 
-                        onClick={() => speak(reconstructSentence(msg.content?.segments || []))}
-                        className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors"
-                        title="Listen"
-                      >
-                        <Volume2 size={18} />
-                      </button>
-                    </>
-                  )}
-                </div>
-
-                {(settings.tutorMode || idx === activeSession.messages.length - 1) && !msg.isError && (
-                  <div className="border-t border-gray-100 pt-3 mt-2 space-y-2">
-                    <p className={`
-                      text-sm text-gray-500 font-serif italic transition-all duration-300
-                      ${settings.englishMode === 'hidden' ? 'opacity-0 h-0 overflow-hidden' : ''}
-                      ${/* CHANGED: hover:blur-0 -> hover:blur-none */ ''}
-                      ${settings.englishMode === 'hover' ? 'blur-[3px] hover:blur-none cursor-pointer select-none' : ''}
-                    `}>
-                      {safeString(msg.content?.english)}
-                    </p>
-                    {msg.content?.grammar_point && (
-                      <div className="flex items-start gap-2 text-sm text-indigo-600 bg-indigo-50 p-2 rounded-lg">
-                        <GraduationCap size={16} className="mt-0.5 shrink-0" />
-                        <span>{safeString(msg.content.grammar_point)}</span>
-                      </div>
+                    ) : (
+                      <>
+                        <div className="text-gray-800 flex-1">
+                          {msg.content && msg.content.segments 
+                            ? <InteractiveSentence 
+                                segments={msg.content.segments} 
+                                furiganaMode={settings.furiganaMode} 
+                                onWordClick={(seg) => onWordClick(seg, msg.content.segments)} 
+                              />
+                            : <div className="text-xl">{safeString(msg.content?.japanese || "...")}</div>
+                          }
+                        </div>
+                        <button 
+                          onClick={() => handleSpeak(reconstructSentence(msg.content?.segments || []), messageId)}
+                          className={`p-1.5 rounded-full transition-all ${
+                            isThisPlaying 
+                              ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 animate-pulse' 
+                              : 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50'
+                          }`}
+                          title={isThisPlaying ? "Stop" : "Listen"}
+                        >
+                          {isThisPlaying ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                        </button>
+                      </>
                     )}
                   </div>
-                )}
-              </div>
-            )}
+
+                  {(settings.tutorMode || idx === activeSession.messages.length - 1) && !msg.isError && (
+                    <div className="border-t border-gray-100 pt-3 mt-2 space-y-2">
+                      <p className={`
+                        text-sm text-gray-500 font-serif italic transition-all duration-300
+                        ${settings.englishMode === 'hidden' ? 'opacity-0 h-0 overflow-hidden' : ''}
+                        ${settings.englishMode === 'hover' ? 'blur-[3px] hover:blur-none cursor-pointer select-none' : ''}
+                      `}>
+                        {safeString(msg.content?.english)}
+                      </p>
+                      {msg.content?.grammar_point && (
+                        <div className="flex items-start gap-2 text-sm text-indigo-600 bg-indigo-50 p-2 rounded-lg">
+                          <GraduationCap size={16} className="mt-0.5 shrink-0" />
+                          <span>{safeString(msg.content.grammar_point)}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
       {isProcessing && (
         <div className="flex justify-start">
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-2">

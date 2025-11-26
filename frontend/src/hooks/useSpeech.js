@@ -1,61 +1,68 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
 
 const useSpeech = () => {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [isSupported, setIsSupported] = useState(true);
-  const recognitionRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
 
-  useEffect(() => {
-    if (typeof window === 'undefined' || (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window))) {
-      setIsSupported(false);
-      return;
-    }
-
-    try {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = true; 
-      recognitionRef.current.interimResults = true;
-      recognitionRef.current.lang = 'ja-JP';
-
-      recognitionRef.current.onresult = (event) => {
-        const text = Array.from(event.results).map(r => r[0].transcript).join('');
-        setTranscript(text);
-      };
-      
-      recognitionRef.current.onerror = (event) => {
-        console.error("Speech recognition error", event.error);
-        setIsListening(false);
-      };
-
-      recognitionRef.current.onend = () => setIsListening(false);
-    } catch (e) {
-      console.error("Speech init failed", e);
-      setIsSupported(false);
-    }
-  }, []);
-
-  const toggle = useCallback(() => {
-    if (!isSupported || !recognitionRef.current) {
-      alert("Speech recognition is not supported in this browser or environment.");
-      return;
-    }
-
+  const toggle = useCallback(async () => {
     if (isListening) {
-      recognitionRef.current.stop();
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
+      setIsListening(false);
     } else {
-      setTranscript('');
       try {
-        recognitionRef.current.start();
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+        mediaRecorderRef.current = mediaRecorder;
+        chunksRef.current = [];
+
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) {
+            chunksRef.current.push(e.data);
+          }
+        };
+
+        mediaRecorder.onstop = async () => {
+          stream.getTracks().forEach(track => track.stop());
+          const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
+          
+          try {
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'recording.webm');
+
+            const token = localStorage.getItem('token');
+            const response = await fetch('/api/transcribe', {
+              method: 'POST',
+              headers: {
+                ...(token && { 'Authorization': `Bearer ${token}` })
+              },
+              body: formData
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              setTranscript(data.text || '');
+            } else {
+              console.error('Transcription failed:', response.status);
+            }
+          } catch (err) {
+            console.error('Failed to transcribe:', err);
+          }
+        };
+
+        mediaRecorder.start();
         setIsListening(true);
-      } catch (e) {
-        console.error("Failed to start recognition:", e);
-        setIsListening(false);
-        alert("Microphone failed to start. Check permissions.");
+      } catch (err) {
+        console.error('Microphone access denied:', err);
+        setIsSupported(false);
+        alert('Microphone access denied. Please allow microphone permissions.');
       }
     }
-  }, [isListening, isSupported]);
+  }, [isListening]);
 
   return { isListening, transcript, setTranscript, toggle, isSupported };
 };

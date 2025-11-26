@@ -1,5 +1,9 @@
 flask
 flask-cors
+flask-jwt-extended
+bcrypt
 google-generativeai
 psycopg2-binary
 python-dotenv
+edge-tts
+requests

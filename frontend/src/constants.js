@@ -1,8 +1,17 @@
 // frontend/src/constants.js
 
-// Bump version to v17.0 to invalidate old LocalStorage data
-export const APP_VERSION = 'v17.0'; 
+export const APP_VERSION = 'v18.0'; 
 export const STORAGE_KEY = `japanese_tutor_data_${APP_VERSION}`;
+
+export const VOICE_OPTIONS = {
+  'ja-JP-NanamiNeural': { label: 'Nanami (Female)', gender: 'female' },
+  'ja-JP-KeitaNeural': { label: 'Keita (Male)', gender: 'male' },
+  'ja-JP-AoiNeural': { label: 'Aoi (Female)', gender: 'female' },
+  'ja-JP-DaichiNeural': { label: 'Daichi (Male)', gender: 'male' },
+  'ja-JP-MayuNeural': { label: 'Mayu (Female)', gender: 'female' },
+  'ja-JP-NaokiNeural': { label: 'Naoki (Male)', gender: 'male' },
+  'ja-JP-ShioriNeural': { label: 'Shiori (Female)', gender: 'female' },
+};
 
 export const LEVEL_PRESETS = {
   'N5': {
@@ -27,8 +36,8 @@ export const DEFAULT_SETTINGS = {
   englishMode: 'visible',
   autoAddVocab: false,
   useCustomBackend: true,
-  // This relative path is crucial for the Proxy to work
-  backendUrl: import.meta.env.VITE_API_BASE_URL || '/api/chat'
+  backendUrl: import.meta.env.VITE_API_BASE_URL || '/api/chat',
+  ttsVoice: 'ja-JP-NanamiNeural'
 };
 
 export const safeString = (val) => {

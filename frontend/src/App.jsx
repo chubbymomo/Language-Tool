@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, ChevronLeft, MessageSquare, BookOpen, Settings, Mic, Square, Send, WifiOff } from 'lucide-react';
+import { Menu, ChevronLeft, MessageSquare, BookOpen, Settings, Mic, Square, Send, WifiOff, LogOut, Loader2 } from 'lucide-react';
 
 // Components
 import Sidebar from './components/Sidebar';
@@ -7,71 +7,165 @@ import ChatArea from './components/ChatArea';
 import WordInspector from './components/WordInspector';
 import KnowledgePanel from './components/KnowledgePanel';
 import SettingsPanel from './components/SettingsPanel';
+import AuthPage from './components/AuthPage';
 
-// Hooks & Services
-import usePersistence from './hooks/usePersistence';
+// Context & Services
+import { useAuth } from './context/AuthContext';
+import { 
+  fetchGeminiReply, 
+  fetchSettings, saveSettings,
+  fetchSessions, saveSession, deleteSession as apiDeleteSession,
+  fetchVocab, saveVocabItem
+} from './services/api';
+
+// Constants
+import { DEFAULT_SETTINGS, INITIAL_MESSAGE_SEGMENTS, safeString, reconstructSentence } from './constants';
+
+// Hooks
 import useSpeech from './hooks/useSpeech';
-import { fetchGeminiReply } from './services/api';
-import { INITIAL_MESSAGE_SEGMENTS, safeString, reconstructSentence } from './constants';
 
 function JapaneseTutorApp() {
-  // State & Hooks
-  const [data, persist] = usePersistence();
-  const { settings, knownVocab, sessions, activeSessionId } = data;
-  const { isListening, transcript, setTranscript, toggle: toggleMic, isSupported } = useSpeech();
+  const { user, logout, loading: authLoading } = useAuth();
+  
+  // State
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [knownVocab, setKnownVocab] = useState([]);
+  const [sessions, setSessions] = useState([]);
+  const [activeSessionId, setActiveSessionId] = useState(null);
+  const [dataLoading, setDataLoading] = useState(true);
   
   const [isProcessing, setIsProcessing] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeTab, setActiveTab] = useState('chat'); 
   const [inspectedWord, setInspectedWord] = useState(null); 
   const [inputText, setInputText] = useState('');
+  
+  const { isListening, transcript, setTranscript, toggle: toggleMic, isSupported } = useSpeech();
 
   // Sync Speech to Input
   useEffect(() => { if (transcript) setInputText(transcript); }, [transcript]);
+
+  // Load user data on login
+  useEffect(() => {
+    if (user) {
+      loadUserData();
+    }
+  }, [user]);
+
+  const loadUserData = async () => {
+    setDataLoading(true);
+    try {
+      const [settingsData, sessionsData, vocabData] = await Promise.all([
+        fetchSettings(),
+        fetchSessions(),
+        fetchVocab()
+      ]);
+      
+      setSettings({ ...DEFAULT_SETTINGS, ...settingsData });
+      setKnownVocab(vocabData);
+      
+      if (sessionsData.length > 0) {
+        setSessions(sessionsData);
+        setActiveSessionId(sessionsData[0].id);
+      } else {
+        // Create default session
+        const defaultSession = {
+          id: crypto.randomUUID(),
+          title: 'New Conversation',
+          messages: [{ role: 'assistant', content: { segments: INITIAL_MESSAGE_SEGMENTS, english: "Hello! Let's practice Japanese.", grammar_point: null } }]
+        };
+        setSessions([defaultSession]);
+        setActiveSessionId(defaultSession.id);
+        await saveSession(defaultSession);
+      }
+    } catch (e) {
+      console.error('Failed to load user data:', e);
+    } finally {
+      setDataLoading(false);
+    }
+  };
+
+  // Persist settings changes
+  const updateSettings = async (updateFn) => {
+    const newSettings = updateFn(settings);
+    setSettings(newSettings);
+    try {
+      await saveSettings(newSettings);
+    } catch (e) {
+      console.error('Failed to save settings:', e);
+    }
+  };
 
   const activeSession = sessions.find(s => s.id === activeSessionId) || sessions[0];
 
   // --- Handlers ---
 
-  const handleCreateSession = () => {
+  const handleCreateSession = async () => {
     const newSession = {
       id: crypto.randomUUID(),
       title: `Conversation ${sessions.length + 1}`,
       messages: [{ role: 'assistant', content: { segments: INITIAL_MESSAGE_SEGMENTS, english: "New Conversation", grammar_point: null } }]
     };
-    persist({ sessions: [...sessions, newSession], activeSessionId: newSession.id });
+    setSessions([newSession, ...sessions]);
+    setActiveSessionId(newSession.id);
     if(window.innerWidth < 768) setSidebarOpen(false);
+    
+    try {
+      await saveSession(newSession);
+    } catch (e) {
+      console.error('Failed to save session:', e);
+    }
   };
 
-  const handleDeleteSession = (e, id) => {
+  const handleDeleteSession = async (e, id) => {
     e.stopPropagation();
     if (sessions.length <= 1) return;
+    
     const filtered = sessions.filter(s => s.id !== id);
-    persist({ sessions: filtered, activeSessionId: activeSessionId === id ? filtered[0].id : activeSessionId });
+    setSessions(filtered);
+    if (activeSessionId === id) {
+      setActiveSessionId(filtered[0].id);
+    }
+    
+    try {
+      await apiDeleteSession(id);
+    } catch (e) {
+      console.error('Failed to delete session:', e);
+    }
   };
 
-  const handleAddToVocab = (wordData, context) => {
+  const handleAddToVocab = async (wordData, context) => {
     const term = safeString(wordData.text);
     const existing = knownVocab.find(p => p.term === term);
-    let newVocab = [];
+    let newItem;
 
     if (existing) {
-       newVocab = knownVocab.map(p => p.term === term 
-         ? { ...p, examples: [...new Set([...p.examples, context])], explanation: safeString(wordData.explanation) || p.explanation } 
-         : p);
+      newItem = { 
+        ...existing, 
+        examples: [...new Set([...existing.examples, context])], 
+        explanation: safeString(wordData.explanation) || existing.explanation 
+      };
+      setKnownVocab(knownVocab.map(p => p.term === term ? newItem : p));
     } else {
-       newVocab = [...knownVocab, {
-         id: crypto.randomUUID(),
-         term,
-         reading: safeString(wordData.reading),
-         meaning: safeString(wordData.meaning),
-         explanation: safeString(wordData.explanation),
-         examples: [context],
-         mastery: 1,
-         addedAt: Date.now()
-       }];
+      newItem = {
+        id: crypto.randomUUID(),
+        term,
+        reading: safeString(wordData.reading),
+        meaning: safeString(wordData.meaning),
+        explanation: safeString(wordData.explanation),
+        examples: [context],
+        mastery: 1,
+        addedAt: Date.now()
+      };
+      setKnownVocab([newItem, ...knownVocab]);
     }
-    persist({ knownVocab: newVocab });
+    
+    try {
+      await saveVocabItem(newItem);
+    } catch (e) {
+      console.error('Failed to save vocab:', e);
+    }
+    
     setInspectedWord(null);
   };
 
@@ -85,16 +179,18 @@ function JapaneseTutorApp() {
     setInputText('');
     setTranscript('');
     
-    // 1. Add User Message
-    const updatedSessions = sessions.map(s => s.id === activeSessionId ? { ...s, messages: [...s.messages, { role: 'user', content: text }] } : s);
-    persist({ sessions: updatedSessions });
+    // Add User Message
+    const updatedMessages = [...activeSession.messages, { role: 'user', content: text }];
+    const updatedSessions = sessions.map(s => 
+      s.id === activeSessionId ? { ...s, messages: updatedMessages } : s
+    );
+    setSessions(updatedSessions);
     setIsProcessing(true);
 
     try {
-      // 2. Fetch AI Reply
       const reply = await fetchGeminiReply(text, settings, knownVocab);
       
-      // 3. Auto-Add Vocab Logic
+      // Auto-Add Vocab Logic
       let updatedVocab = [...knownVocab];
       if (settings.autoAddVocab && reply.segments) {
         const context = reconstructSentence(reply.segments);
@@ -112,23 +208,69 @@ function JapaneseTutorApp() {
           }));
         
         if (newWords.length > 0) {
-          updatedVocab = [...updatedVocab, ...newWords];
+          updatedVocab = [...newWords, ...updatedVocab];
+          setKnownVocab(updatedVocab);
+          // Save new vocab items
+          for (const word of newWords) {
+            try {
+              await saveVocabItem(word);
+            } catch (e) {
+              console.error('Failed to save vocab:', e);
+            }
+          }
         }
       }
 
-      // 4. Update Session with AI Message
-      const finalSessions = updatedSessions.map(s => s.id === activeSessionId ? { ...s, messages: [...s.messages, { role: 'assistant', content: reply }] } : s);
-      persist({ sessions: finalSessions, knownVocab: updatedVocab });
+      // Update Session with AI Message
+      const finalMessages = [...updatedMessages, { role: 'assistant', content: reply }];
+      const finalSession = { ...activeSession, messages: finalMessages };
+      const finalSessions = sessions.map(s => 
+        s.id === activeSessionId ? finalSession : s
+      );
+      setSessions(finalSessions);
+      
+      // Save session
+      try {
+        await saveSession(finalSession);
+      } catch (e) {
+        console.error('Failed to save session:', e);
+      }
 
     } catch (e) {
       console.error(e);
-      // Error State
-      const errorSessions = updatedSessions.map(s => s.id === activeSessionId ? { ...s, messages: [...s.messages, { role: 'assistant', isError: true, content: { text: e.message || "Unknown error" } }] } : s);
-      persist({ sessions: errorSessions });
+      const errorMessages = [...updatedMessages, { role: 'assistant', isError: true, content: { text: e.message || "Unknown error" } }];
+      setSessions(sessions.map(s => 
+        s.id === activeSessionId ? { ...s, messages: errorMessages } : s
+      ));
     } finally {
       setIsProcessing(false);
     }
   };
+
+  // --- Loading States ---
+  
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <Loader2 size={32} className="animate-spin text-indigo-600" />
+      </div>
+    );
+  }
+  
+  if (!user) {
+    return <AuthPage />;
+  }
+  
+  if (dataLoading) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 size={32} className="animate-spin text-indigo-600 mx-auto mb-4" />
+          <p className="text-gray-500">Loading your data...</p>
+        </div>
+      </div>
+    );
+  }
 
   // --- Render ---
 
@@ -142,9 +284,11 @@ function JapaneseTutorApp() {
         sessions={sessions} 
         activeSessionId={activeSessionId} 
         isOpen={sidebarOpen} 
-        onSelectSession={(id) => { persist({ activeSessionId: id }); setActiveTab('chat'); if(window.innerWidth<768) setSidebarOpen(false); }}
+        onSelectSession={(id) => { setActiveSessionId(id); setActiveTab('chat'); if(window.innerWidth<768) setSidebarOpen(false); }}
         onCreateSession={handleCreateSession}
         onDeleteSession={handleDeleteSession}
+        user={user}
+        onLogout={logout}
       />
 
       {/* Main Content */}
@@ -156,7 +300,7 @@ function JapaneseTutorApp() {
         <header className="bg-white border-b px-6 py-3 flex justify-between items-center shrink-0">
           <div className="flex items-center gap-3">
              <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 hidden md:block">{sidebarOpen ? <ChevronLeft size={20} /> : <Menu size={20} />}</button>
-             <div><h1 className="font-bold text-lg text-gray-800">{safeString(activeSession.title)}</h1><p className="text-xs text-gray-500">{settings.targetLevel}</p></div>
+             <div><h1 className="font-bold text-lg text-gray-800">{activeSession ? safeString(activeSession.title) : 'J-Tutor'}</h1><p className="text-xs text-gray-500">{settings.targetLevel}</p></div>
           </div>
           <div className="flex bg-gray-100 p-1 rounded-lg">
             {['chat', 'knowledge', 'settings'].map(tab => (
@@ -171,7 +315,7 @@ function JapaneseTutorApp() {
         </header>
 
         {/* Tab Views */}
-        {activeTab === 'chat' && (
+        {activeTab === 'chat' && activeSession && (
           <>
             <ChatArea 
               activeSession={activeSession} 
@@ -208,7 +352,7 @@ function JapaneseTutorApp() {
         )}
 
         {activeTab === 'knowledge' && <KnowledgePanel knownVocab={knownVocab} onAddManual={handleManualAdd} />}
-        {activeTab === 'settings' && <SettingsPanel settings={settings} setSettings={(fn) => persist({ settings: fn(settings) })} />}
+        {activeTab === 'settings' && <SettingsPanel settings={settings} setSettings={updateSettings} />}
       </div>
     </div>
   );

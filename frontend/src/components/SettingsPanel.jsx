@@ -1,5 +1,6 @@
 import React from 'react';
-import { Server, Eye, EyeOff, MousePointer2, Languages } from 'lucide-react';
+import { Server, Eye, EyeOff, MousePointer2, Languages, Volume2 } from 'lucide-react';
+import { VOICE_OPTIONS } from '../constants';
 
 const SettingsPanel = ({ settings, setSettings }) => (
   <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
@@ -19,6 +20,29 @@ const SettingsPanel = ({ settings, setSettings }) => (
           >
             <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${settings.autoAddVocab ? 'left-7' : 'left-1'}`} />
           </button>
+        </div>
+      </div>
+
+      {/* Voice Selection */}
+      <div className="p-4 bg-purple-50 rounded-lg border border-purple-100">
+        <h3 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
+          <Volume2 size={18} className="text-purple-600" /> TTS Voice
+        </h3>
+        <div className="grid grid-cols-2 gap-2">
+          {Object.entries(VOICE_OPTIONS).map(([voiceId, { label, gender }]) => (
+            <button
+              key={voiceId}
+              onClick={() => setSettings(s => ({ ...s, ttsVoice: voiceId }))}
+              className={`flex items-center gap-2 p-2 rounded-lg text-sm font-medium border transition-all ${
+                settings.ttsVoice === voiceId 
+                  ? 'bg-white border-purple-500 text-purple-600 shadow-sm' 
+                  : 'border-transparent text-gray-500 hover:bg-white/50'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${gender === 'female' ? 'bg-pink-400' : 'bg-blue-400'}`} />
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 

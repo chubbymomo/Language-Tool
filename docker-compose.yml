@@ -1,5 +1,4 @@
 services:
-  # PostgreSQL Database
   db:
     image: postgres:16-alpine
     container_name: jtutor-db
@@ -10,15 +9,28 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U languagetool -d japaneselanguagetool"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Flask Backend
+  whisper:
+    image: onerahmet/openai-whisper-asr-webservice:latest
+    container_name: jtutor-whisper
+    restart: unless-stopped
+    environment:
+      ASR_MODEL: base
+      ASR_ENGINE: openai_whisper
+    volumes:
+      - whisper_cache:/root/.cache/whisper
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
   backend:
     build: ./backend
     container_name: jtutor-backend
@@ -26,10 +38,12 @@ services:
     environment:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       DB_DSN: "dbname='japaneselanguagetool' user='languagetool' host='db' password='${DB_PASSWORD:-password}'"
-    ports:
-      - "5000:5000"
+      WHISPER_URL: "http://whisper:9000"
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
     depends_on:
       db:
+        condition: service_healthy
+      whisper:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
@@ -38,7 +52,6 @@ services:
       retries: 3
       start_period: 10s
 
-  # React Frontend (Production)
   frontend:
     build: ./frontend
     container_name: jtutor-frontend
@@ -51,3 +64,4 @@ services:
 
 volumes:
   postgres_data:
+  whisper_cache:

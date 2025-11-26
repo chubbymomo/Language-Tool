@@ -1,5 +1,4 @@
 import os
-import sys
 import psycopg2
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
@@ -9,7 +8,6 @@ load_dotenv()
 
 DB_DSN = os.getenv("DB_DSN")
 
-# Initialize Connection Pool
 connection_pool = None
 
 def init_pool():
@@ -59,10 +57,29 @@ def init_db():
         conn = get_db_connection()
         conn.autocommit = True
         with conn.cursor() as cur:
-            # Create Vocab Table
+            # Create Users Table
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id TEXT PRIMARY KEY,
+                    email TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    created_at BIGINT NOT NULL
+                );
+            """)
+            
+            # Create User Settings Table
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS user_settings (
+                    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                    settings JSONB DEFAULT '{}'::jsonb
+                );
+            """)
+            
+            # Create Vocab Table with user_id
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS vocab (
                     id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                     term TEXT NOT NULL,
                     reading TEXT,
                     meaning TEXT,
@@ -72,13 +89,29 @@ def init_db():
                     added_at BIGINT
                 );
             """)
-            # Create Sessions Table
+            
+            # Create index on vocab user_id
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_vocab_user_id ON vocab(user_id);
+            """)
+            
+            # Create Sessions Table with user_id
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS sessions (
                     id TEXT PRIMARY KEY,
-                    data TEXT
+                    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    title TEXT,
+                    messages JSONB DEFAULT '[]'::jsonb,
+                    created_at BIGINT,
+                    updated_at BIGINT
                 );
             """)
+            
+            # Create index on sessions user_id
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+            """)
+            
         print("✅ Database tables initialized")
         return True
     except Exception as e:

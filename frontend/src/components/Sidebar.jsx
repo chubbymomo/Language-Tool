@@ -1,8 +1,8 @@
 import React from 'react';
-import { Brain, PlusCircle, MessageSquare, X } from 'lucide-react';
+import { Brain, PlusCircle, MessageSquare, X, LogOut, User } from 'lucide-react';
 import { APP_VERSION, safeString } from '../constants';
 
-const Sidebar = ({ sessions, activeSessionId, isOpen, onSelectSession, onCreateSession, onDeleteSession }) => (
+const Sidebar = ({ sessions, activeSessionId, isOpen, onSelectSession, onCreateSession, onDeleteSession, user, onLogout }) => (
   <div className={`
     ${isOpen ? 'w-64' : 'w-0'} bg-gray-900 text-gray-300 transition-all duration-300 ease-in-out overflow-hidden flex flex-col border-r border-gray-800
     absolute md:relative z-20 h-full shadow-xl
@@ -11,6 +11,26 @@ const Sidebar = ({ sessions, activeSessionId, isOpen, onSelectSession, onCreateS
       <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold"><Brain size={18} /></div>
       <span className="font-bold text-white tracking-wide">J-TUTOR</span>
     </div>
+    
+    {/* User Info */}
+    {user && (
+      <div className="p-3 border-b border-gray-800 flex items-center justify-between">
+        <div className="flex items-center gap-2 overflow-hidden">
+          <div className="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center">
+            <User size={14} />
+          </div>
+          <span className="text-sm truncate">{user.email}</span>
+        </div>
+        <button 
+          onClick={onLogout}
+          className="p-1.5 hover:bg-gray-800 rounded text-gray-400 hover:text-white transition-colors"
+          title="Sign out"
+        >
+          <LogOut size={16} />
+        </button>
+      </div>
+    )}
+    
     <div className="flex-1 overflow-y-auto p-2 space-y-1">
       <button onClick={onCreateSession} className="w-full flex items-center gap-2 p-3 bg-gray-800 hover:bg-gray-700 text-white rounded-lg mb-4 transition-colors text-sm font-medium">
         <PlusCircle size={16} /> New Chat
