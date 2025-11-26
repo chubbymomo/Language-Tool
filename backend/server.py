@@ -7,7 +7,11 @@ from flask_cors import CORS
 import google.generativeai as genai
 
 # --- CONFIGURATION ---
-API_KEY = os.environ.get("AI_API_KEY", "") 
+# Support both variable names, prioritizing GEMINI_API_KEY
+API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("AI_API_KEY")
+
+if not API_KEY:
+    print("⚠️  WARNING: No API Key found. Please set GEMINI_API_KEY or AI_API_KEY environment variable.")
 
 # Postgres Configuration
 # If you set a password, add password='your_password' to the conn_string
@@ -16,7 +20,9 @@ DB_DSN = "dbname='japaneselanguagetool' user='languagetool' host='localhost'"
 # --- SETUP ---
 app = Flask(__name__)
 CORS(app)
-genai.configure(api_key=API_KEY)
+
+if API_KEY:
+    genai.configure(api_key=API_KEY)
 
 # --- DATABASE HELPER ---
 def get_db_connection():
@@ -57,6 +63,9 @@ def init_db():
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
+    if not API_KEY:
+        return jsonify({"error": "Server API Key is missing"}), 500
+
     data = request.json
     user_message = data.get('message', '')
     level_context = data.get('levelContext', '')
@@ -83,6 +92,7 @@ def chat():
     """
 
     try:
+        # Using the latest stable flash model alias
         model = genai.GenerativeModel('gemini-flash-latest')
         response = model.generate_content(
             system_prompt,
