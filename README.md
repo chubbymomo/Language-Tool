@@ -1,78 +1,241 @@
-# 🇯🇵 Japanese Immersion Tutor
+# J-Tutor: Japanese Language Learning App
 
-A context-aware language learning tool powered by **Google Gemini**, **React**, **Python (Flask)**, and **PostgreSQL**.
+An interactive Japanese language tutor powered by Google's Gemini AI. Features real-time conversation practice, vocabulary tracking, furigana support, and speech recognition.
 
-This app allows you to have natural conversations in Japanese while it tracks your vocabulary and grammar exposure. It auto-generates flashcards and explanations based on the context of your conversation.
+## Features
 
-## 🌟 Features
+- **AI-Powered Conversations** - Practice Japanese with contextual responses tailored to your JLPT level
+- **Interactive Sentences** - Click any word to see readings, meanings, and grammar explanations
+- **Vocabulary Tracking** - Build your personal knowledge base with automatic or manual word saving
+- **Furigana Support** - Toggle reading aids (always visible, hover, or hidden)
+- **Speech Input** - Practice speaking with browser-based speech recognition
+- **Text-to-Speech** - Hear correct pronunciation of Japanese sentences
+- **Persistent Sessions** - Your conversations and vocabulary sync to a PostgreSQL database
 
-- **Natural Conversation:** Chat with an AI personality tailored to your JLPT level.
-- **Context-Aware Dictionary:** Click any word to see its meaning *in that specific sentence*.
-- **Auto-Vocabulary Harvesting:** Automatically saves nouns, verbs, and adjectives from the conversation.
-- **Audio (TTS):** Click the speaker icon to hear Japanese pronunciation.
-- **Speech-to-Text:** Practice speaking with microphone input.
-- **Persistent Memory:** Remembers your progress using a local PostgreSQL database.
+## Tech Stack
 
-## 🛠️ Prerequisites
+| Layer | Technology |
+|-------|------------|
+| Frontend | React 18, Vite, Tailwind CSS |
+| Backend | Flask, Python 3.10+ |
+| AI | Google Gemini API |
+| Database | PostgreSQL |
 
-Ensure you have the following installed:
+## Prerequisites
 
-- **Python** (3.10+)
-- **Node.js** (v18+)
-- **PostgreSQL**
+- Python 3.10+
+- Node.js 18+
+- PostgreSQL 14+
+- Google Gemini API key ([get one here](https://makersuite.google.com/app/apikey))
 
-## 📦 Setup
+## Quick Start
 
-### 1. Database Configuration
-
-You need a Postgres database running locally.
+### 1. Clone and Navigate
 
 ```bash
-# Log into Postgres
-sudo -u postgres psql
+git clone <your-repo-url>
+cd japanese-tutor
+```
 
-# Run these SQL commands:
-CREATE USER languagetool WITH SUPERUSER PASSWORD 'password';
-CREATE DATABASE japaneselanguagetool OWNER languagetool;
+### 2. Set Up PostgreSQL
+
+```bash
+# Create database and user
+psql -U postgres
+```
+
+```sql
+CREATE DATABASE japaneselanguagetool;
+CREATE USER languagetool WITH PASSWORD 'password';
+GRANT ALL PRIVILEGES ON DATABASE japaneselanguagetool TO languagetool;
+\c japaneselanguagetool
+GRANT ALL ON SCHEMA public TO languagetool;
 \q
 ```
 
-### 2. Environment Variables
-
-You need a Google Gemini API Key. You can set either `GEMINI_API_KEY` or `AI_API_KEY`.
+### 3. Configure Environment
 
 ```bash
-export GEMINI_API_KEY="your_api_key_here"
-# OR
-export AI_API_KEY="your_api_key_here"
+# Copy the example env file
+cp backend/.env.example backend/.env
+
+# Edit with your actual values
+nano backend/.env
 ```
 
-### 3. First Run
+Your `.env` should look like:
 
-Make the launch script executable:
+```env
+GEMINI_API_KEY=your_actual_api_key_here
+DB_DSN=dbname='japaneselanguagetool' user='languagetool' host='localhost' password='password'
+```
+
+### 4. Run the App
+
+**Option A: Use the startup script (recommended)**
 
 ```bash
-chmod +x launch.sh
+# Set your API key in the environment
+export GEMINI_API_KEY='your_key_here'
+
+# Make script executable and run
+chmod +x start.sh
+./start.sh
 ```
 
-## 🚀 Running the App
+**Option B: Run manually**
 
-Simply run the launch script. It will handle virtual environments, dependencies, and server processes for you.
+Terminal 1 (Backend):
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python app.py
+```
+
+Terminal 2 (Frontend):
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+### 5. Open the App
+
+Navigate to [http://localhost:5173](http://localhost:5173)
+
+## Project Structure
+
+```
+japanese-tutor/
+├── backend/
+│   ├── app.py              # Flask server & API routes
+│   ├── ai.py               # Gemini API integration
+│   ├── database.py         # PostgreSQL connection pool
+│   ├── requirements.txt    # Python dependencies
+│   └── .env.example        # Environment template
+├── frontend/
+│   ├── src/
+│   │   ├── components/     # React components
+│   │   │   ├── ChatArea.jsx
+│   │   │   ├── KnowledgePanel.jsx
+│   │   │   ├── SettingsPanel.jsx
+│   │   │   ├── Sidebar.jsx
+│   │   │   └── WordInspector.jsx
+│   │   ├── hooks/          # Custom React hooks
+│   │   │   ├── usePersistence.js
+│   │   │   ├── useSpeech.js
+│   │   │   └── useTTS.js
+│   │   ├── services/
+│   │   │   └── api.js      # Backend API calls
+│   │   ├── constants.js    # App configuration
+│   │   ├── App.jsx         # Main app component
+│   │   └── main.jsx        # React entry point
+│   ├── vite.config.js      # Vite config with API proxy
+│   └── package.json
+├── start.sh                # One-command startup script
+└── README.md
+```
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/health` | Health check (database status) |
+| POST | `/api/chat` | Send message, get AI response |
+| GET | `/api/vocab` | Retrieve all saved vocabulary |
+| POST | `/api/vocab` | Save/update a vocabulary item |
+
+### Chat Request Example
 
 ```bash
-./launch.sh
+curl -X POST http://localhost:5000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "こんにちは",
+    "levelContext": "The user is a beginner (JLPT N5 level).",
+    "vocabContext": "猫, 犬, 食べる"
+  }'
 ```
 
-Open your browser to: [http://localhost:5173](http://localhost:5173)
+## Configuration Options
 
-## 📂 Architecture
+### JLPT Levels
 
-- **`frontend/`**: React + Vite + TailwindCSS. Handles UI, Audio, and WebSocket/HTTP logic.
-- **`backend/`**: Flask server. Handles Gemini API calls, prompt engineering, and Database persistence.
-- **`launch.sh`**: Orchestrator script for development.
+- **N5** - Beginner: Basic polite forms, simple particles
+- **N4** - Upper Beginner: Te-form, potential verbs
+- **N3** - Intermediate: Passive/causative, casual speech
 
-## 🔧 Troubleshooting
+### Display Settings
 
-- **Microphone not working?** Ensure your browser has permission to access the microphone for `localhost`.
-- **Database Error?** Check `backend/server.py` to ensure the `DB_DSN` string matches your Postgres credentials.
-- **API Error?** Ensure your API key is exported in your terminal session before running the script.
+- **Furigana Mode**: `always` | `hover` | `hidden`
+- **English Translation**: `visible` | `hover` | `hidden`
+- **Auto-Add Vocabulary**: Automatically save new words from AI responses
+
+## Troubleshooting
+
+### "Database not available"
+
+1. Check PostgreSQL is running: `pg_isready`
+2. Verify your `DB_DSN` in `.env`
+3. Ensure the user has proper permissions
+
+### "No API Key found"
+
+1. Check `.env` file exists in `backend/`
+2. Verify `GEMINI_API_KEY` is set correctly
+3. Or export it: `export GEMINI_API_KEY='your_key'`
+
+### Speech recognition not working
+
+- Chrome/Edge required (uses Web Speech API)
+- Microphone permissions must be granted
+- HTTPS required in production
+
+### Frontend can't reach backend
+
+1. Check backend is running on port 5000
+2. Verify Vite proxy in `vite.config.js`
+3. Check for CORS errors in browser console
+
+## Development
+
+### Adding New Components
+
+```bash
+# Components go in frontend/src/components/
+touch frontend/src/components/NewComponent.jsx
+```
+
+### Database Migrations
+
+Currently using auto-initialization. For production, consider adding Alembic:
+
+```bash
+pip install alembic
+alembic init migrations
+```
+
+### Building for Production
+
+```bash
+cd frontend
+npm run build
+# Serve dist/ folder with nginx or similar
+```
+
+## License
+
+MIT
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+---
+
+Built with ☕ and 日本語 practice in mind.

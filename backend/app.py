@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import json
 from psycopg2.extras import RealDictCursor
-from database import init_db, get_db_connection, release_db_connection
+from database import init_db, get_db_connection, release_db_connection, is_db_available
 from ai import generate_tutor_response
 
 app = Flask(__name__)
@@ -11,6 +11,15 @@ CORS(app)
 # Initialize Database Tables on Startup
 with app.app_context():
     init_db()
+
+@app.route('/api/health', methods=['GET'])
+def health():
+    """Health check endpoint for startup scripts and monitoring."""
+    status = {
+        "status": "ok",
+        "database": "connected" if is_db_available() else "unavailable"
+    }
+    return jsonify(status)
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
@@ -28,9 +37,14 @@ def chat():
 
 @app.route('/api/vocab', methods=['GET', 'POST'])
 def vocab():
-    conn = get_db_connection()
-    conn.autocommit = True
+    if not is_db_available():
+        return jsonify({"error": "Database not available"}), 503
+    
+    conn = None
     try:
+        conn = get_db_connection()
+        conn.autocommit = True
+        
         if request.method == 'POST':
             item = request.json
             
@@ -64,7 +78,7 @@ def vocab():
         else:
             # GET Request
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("SELECT * FROM vocab")
+                cur.execute("SELECT * FROM vocab ORDER BY added_at DESC")
                 rows = cur.fetchall()
             
             vocab_list = []
@@ -85,9 +99,9 @@ def vocab():
         print(f"Database Error: {e}")
         return jsonify({"error": str(e)}), 500
     finally:
-        # Crucial: Return connection to the pool!
-        release_db_connection(conn)
+        if conn:
+            release_db_connection(conn)
 
 if __name__ == '__main__':
     print("🚀 Server running on http://localhost:5000")
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5000, host='0.0.0.0')

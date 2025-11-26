@@ -1,10 +1,9 @@
 #!/bin/bash
 
 # --- Configuration ---
-# Ensure script fails if any command errors out
 set -e
 
-# Check for API Keys (Support both GEMINI_API_KEY and AI_API_KEY)
+# Check for API Keys
 if [ -n "$GEMINI_API_KEY" ]; then
     echo "✅ Found GEMINI_API_KEY"
 elif [ -n "$AI_API_KEY" ]; then
@@ -26,33 +25,37 @@ cd backend
 # Create venv if it doesn't exist
 if [ ! -d "venv" ]; then
     echo "   Creating virtual environment..."
-    python -m venv venv
+    python3 -m venv venv
 fi
 
 # Activate venv
 source venv/bin/activate
 
-# Install requirements (quietly)
+# Install requirements
 echo "   Checking dependencies..."
-pip install -r requirements.txt > /dev/null
+pip install -r requirements.txt -q
 
 # Start Backend in background
-echo "   Starting Server..."
-python server.py &
+echo "   Starting Flask Server on port 5000..."
+python app.py &
 BACKEND_PID=$!
 
-# Wait a moment for backend to spin up
-sleep 2
+# Wait for backend to be ready
+echo "   Waiting for backend..."
+for i in {1..10}; do
+    if curl -s http://localhost:5000/api/health > /dev/null 2>&1; then
+        echo "   ✅ Backend ready!"
+        break
+    fi
+    sleep 1
+done
 
-# Go back to root
 cd ..
 
 # --- Cleanup Trap ---
-# This ensures that when you Ctrl+C the script, the Python server dies too
 cleanup() {
     echo ""
     echo "🛑 Shutting down..."
-    # Kill the backend process if it exists
     if kill -0 $BACKEND_PID 2>/dev/null; then
         kill $BACKEND_PID
     fi
@@ -64,11 +67,9 @@ trap cleanup EXIT INT TERM
 echo "⚛️  Starting React Frontend..."
 cd frontend
 
-# Check if node_modules exists to speed up launch
 if [ ! -d "node_modules" ]; then
-    echo "   Installing Node dependencies (this runs once)..."
+    echo "   Installing Node dependencies..."
     npm install
 fi
 
-# Start Vite Dev Server
 npm run dev
